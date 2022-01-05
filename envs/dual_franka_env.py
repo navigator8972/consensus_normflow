@@ -60,10 +60,14 @@ class DualFrankaPandaBulletEnv(gym.Env):
         #load right and left arms
         self.sim.setAdditionalSearchPath(pd.getDataPath())
         flags = self.sim.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
-        ornRight=p.getQuaternionFromEuler([0,0,0])
-        ornLeft=p.getQuaternionFromEuler([0,0,0])
-        right = self.sim.loadURDF("franka_panda/panda.urdf", np.array([0,0,0]), ornRight, useFixedBase=True, flags=flags)
-        left = self.sim.loadURDF("franka_panda/panda.urdf", np.array([0,0.8,0]), ornLeft, useFixedBase=True, flags=flags)
+        
+        self.posRight=np.array([0,0,0])
+        self.posLeft=np.array([0,0.8,0])
+        self.ornRight=p.getQuaternionFromEuler([0,0,0])
+        self.ornLeft=p.getQuaternionFromEuler([0,0,0])
+        
+        right = self.sim.loadURDF("franka_panda/panda.urdf", self.posRight, self.ornRight, useFixedBase=True, flags=flags)
+        left = self.sim.loadURDF("franka_panda/panda.urdf", self.posLeft, self.ornLeft, useFixedBase=True, flags=flags)
 
         #initial joint position
         # self.initJointPositions=[0.98, 0.458, 0.31, -2.24, -0.30, 2.66, 2.32, 0.02, 0.02]
@@ -127,3 +131,128 @@ class DualFrankaPandaBulletEnv(gym.Env):
 
         rgb_array = rgb_array[:, :, :3]
         return rgb_array
+
+import pybullet_utils.transformations as trans
+
+class DualFrankaPandaTaskTranslationBulletEnv(DualFrankaPandaBulletEnv):
+    def __init__(self, args) -> None:
+        super().__init__(args)
+
+        #override state and action space for a task representation with only translation component
+        #obs: translational position, velocity, note the right basis is taken as the origin
+        ws_cubic = np.array([1.0, 1.0, 1.0])
+        low_right = np.concatenate([self.posRight - ws_cubic*0.5, -0.2*np.ones(3)])
+        low_left = np.concatenate([self.posLeft - ws_cubic*0.5, -0.2*np.ones(3)])
+        high_right = np.concatenate([self.posRight + ws_cubic*0.5, 0.2*np.ones(3)])
+        high_left = np.concatenate([self.posLeft + ws_cubic*0.5, 0.2*np.ones(3)])
+        self.observation_space = spaces.Box(np.concatenate((low_left, low_right)), np.concatenate((high_left, high_right)))
+
+        #act: force
+        self.action_space = spaces.Box(-30*np.ones(6), 30*np.ones(6))
+
+        self.com_pos = [0.0]*3
+        self.com_pos[2] = 0.04   #Note: this is only valid for franka with hand
+        return
+
+    def get_obs(self):
+        #taking end-effector positions as the observations, using right basis as the origin
+        obs = self.get_ee_pos_and_vel()
+        return np.concatenate(obs)
+
+    def get_ee_pos_and_vel(self):
+        #return end-effector position and velocities
+        arm_ee_state = [self.sim.getLinkState(id,
+                        self.pandaNumDofs-1,
+                        computeLinkVelocity=1,
+                        computeForwardKinematics=0) for id in enumerate(self.robots)]
+        arm_ee_trans = [s[0]+s[6] for s in arm_ee_state]
+
+        return arm_ee_trans
+
+    def get_ee_rot(self):
+        #return end-effector orientation 
+        arm_ee_rot = [self.sim.getLinkState(id,
+                self.pandaNumDofs-1,
+                computeLinkVelocity=0,
+                computeForwardKinematics=0)[1] for id in enumerate(self.robots)]
+        return arm_ee_rot
+    
+    def get_arm_jacobian(self):
+        #jacobian w.r.t the joint position at end-effector link
+        #note there would be an offset to the real contact point
+        zero_vec = [0.0]*self.pandaNumDofs
+        #warning: we cannot directly feed numpy array to calculateJacobian. it dumps a segment fault...
+        agent_pos = self.get_arm_joint_position()
+        jac_lst = [self.sim.calculateJacobian(id, self.pandaNumDofs-1, self.com_pos, agent_pos[i], zero_vec, zero_vec) for i, id in enumerate(self.robots)]
+        jac_t_lst = [j[0] for j in jac_lst]
+        jac_r_lst = [j[1] for j in jac_lst]
+        return jac_t_lst, jac_r_lst
+
+    def get_arm_joint_position(self):
+        joint_state = super().get_obs()
+        return joint_state[:self.pandaNumDofs], joint_state[2*self.pandaNumDofs:3*self.pandaNumDofs]
+    
+    def rot_stiffness_control(self, curr_rot, target_rot):
+        #err = target_rot * curr_rot^T
+        #torque = sign(err[-1])*err[:3]
+        err = trans.quaternion_multiply(target_rot, trans.quaternion_conjugate(curr_rot))
+        return np.sign(err[-1])*err[:3]
+    
+    def rot_error(self, curr_rot, target_rot):
+        #orientation error expressed in the inertial reference frame
+        #note this is different for the one used in stiffness control which is in the body frame
+        err = trans.quaternion_multiply(curr_rot, trans.quaternion_conjugate(target_rot))
+        return err
+    
+    def pseudo_inverse_control(self, jac, dx, damp=1e-3):
+        #dX = jac(q)dq
+        #using damped pseudo inverse to derive dq
+        jac_inv = jac.T@np.linalg.pinv(jac@jac.T+damp*np.eye(jac.shape[0]))
+        return jac_inv.dot(dx)
+
+    def reset(self):
+        super().reset()
+
+        #record desired orientations, quaternion (x,y,z,w)
+        self.desiredOrnLeft = np.array(self.sim.getLinkState(self.robots[0],
+                        self.pandaNumDofs-1,
+                        computeLinkVelocity=1,
+                        computeForwardKinematics=0)[1])
+        self.desiredOrnRight = np.array(self.sim.getLinkState(self.robots[1],
+                        self.pandaNumDofs-1,
+                        computeLinkVelocity=1,
+                        computeForwardKinematics=0)[1])
+        return self.get_obs()
+    
+    def step(self, a):
+        zero_vec = [0.0]*self.pandaNumDofs
+        agent_pos = self.get_arm_joint_position()
+
+        agent_ee_rot = self.get_ee_rot()
+        
+        jac_t_lst, jac_r_lst = self.get_arm_jacobian()
+
+        if self.args.force_ctrl:
+            #compute joint actuation from Cartegian forces; use gravity compensation and a fixed stiffness control for the orientation part
+            gravity_left = self.sim.calculateInverseDynamics(id, agent_pos[0], zero_vec, zero_vec)
+            gravity_right = self.sim.calculateInverseDynamics(id, agent_pos[1], zero_vec, zero_vec)
+
+            rot_control_left = self.rot_stiffness_control(np.array(agent_ee_rot[0]), np.array(self.desiredOrnLeft)).dot(jac_r_lst[0])
+            rot_control_right = self.rot_stiffness_control(np.array(agent_ee_rot[1]), np.array(self.desiredOrnRight)).dot(jac_r_lst[1])
+
+            trans_control_left = a[:3].dot(jac_t_lst[0])
+            trans_control_right = a[3:].dot(jac_t_lst[1])
+            
+            super().step(np.concatenate([gravity_left+rot_control_left+trans_control_left, gravity_right+rot_control_right+trans_control_right]))
+        else:
+            #compute desired joint velocity for Cartesian translational velocity
+            #using Jacobian transpose method to reuse the computation for force
+            rot_err = [self.rot_error(agent_ee_rot[0], self.desiredOrnLeft), self.rot_error(agent_ee_rot[1], self.desiredOrnRight)]
+            
+            jacs = [np.concatenate([np.array(jac_t), np.array(jac_r)],axis=0) for jac_t, jac_r in zip(jac_t_lst, jac_r_lst)]
+            
+            dqs = [self.pseudo_inverse_control(np.array(jac), np.array(err)) for jac, err in zip(jacs, rot_err)]
+
+            super().step(np.concatenate(dqs))
+        return 
+        
