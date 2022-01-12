@@ -214,16 +214,24 @@ class DuoNormalizingFlowDynamicalSystem(nn.Module):
         u_2 = self.normflow_ds[1].forward_with_damping(x[1], x[0], x_dot[1])
         return [u_1, u_2]
 
+def check_nan(tensor):
+    assert(not (tensor != tensor).any())
+
 class ConsensusNormalizingFlowDynamics(nn.Module):
     def __init__(self, n_dim=2, n_agents=2, n_flows=3, hidden_dim=8, L=None, K=None, D=None):
         super().__init__()
-        flows = [flow.RealNVP(n_dim, hidden_dim=hidden_dim, base_network=flow.FCNN) for i in range(n_flows)]
-        self.phi = nn.Sequential(*flows)
+        if n_flows > 0:
+            flows = [flow.RealNVP(n_dim, hidden_dim=hidden_dim, base_network=flow.FCNN) for i in range(n_flows)]
+            self.phi = nn.Sequential(*flows)
+        else:
+            #linear version as the special case
+            self.phi = nn.Identity()
 
         if L is None:
             #fully connected Laplacian by default
             L = -torch.ones(n_agents, n_agents)
-            L += torch.eye(n_agents)*2
+            L += torch.eye(n_agents)*n_agents
+            L = L / n_agents    #normalize laplacian to prevent numerical explosion?
 
         laplacian = torch.kron(L, torch.eye(n_dim))
         self.register_buffer('laplacian', laplacian)
@@ -241,7 +249,7 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
         elif isinstance(D, (int, float)):
             D = torch.ones(n_dim) * D
 
-        self.register_buffer('D', torch.diag(K).unsqueeze(0).repeat(n_agents, 1, 1))
+        self.register_buffer('D', torch.diag(D).unsqueeze(0).repeat(n_agents, 1, 1))
 
         self.n_dim = n_dim
         self.n_agents = n_agents
@@ -260,24 +268,26 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
         x = [batch_dims, n_agents*n_dim]
         x_dot = [batch_dims, n_agents*n_dim]
 
-        u = J^T@L@K@phi(L@x) - J^TDJx_dot
+        u = -J^T@L@K@phi(L@x) - J^TDJx_dot
         """
         batch_dims = x.size()[:-1]
         Lx = torch.matmul(self.laplacian, x.unsqueeze(-1)).squeeze(-1)
         Lx_agent = Lx.view(*batch_dims, self.n_agents, self.n_dim)
         phi = self.phi(Lx_agent.view(-1, self.n_dim))  #(batch_dims * n_agents, n_dim)
         phi_agent = phi.view(*batch_dims, self.n_agents, self.n_dim)
-        # print(x.shape, Lx_agent.shape, phi_agent.shape)
-        # print(phi_agent.view(-1, self.n_dim).shape, Lx_agent.view(-1, self.n_dim).shape)
+
         #agent-wise jacobian (batch_dims, n_agents, n_dim, n_dim)
         phi_jac_agent = jacobian_in_batch(phi, Lx).view(*batch_dims, self.n_agents, self.n_dim, self.n_dim)
 
         if jac_damping:
             damping = phi_jac_agent.transpose(-2, -1) @ self.D @ phi_jac_agent
+        else:
+            damping = self.D.clone()
+
         damping_u = (damping @ (x_dot.view(*batch_dims, self.n_agents, self.n_dim).unsqueeze(-1))).squeeze(-1)
 
         #L@K@phi(Lx) and convert it to agent-wise tensor (batch_dims, n_agents, n_dim)
-        LKphi_agent = (self.laplacian @ (self.K @ phi_agent).view_as(x).unsqueeze(-1)).squeeze(-1).view(*batch_dims, self.n_agents, self.n_dim)
-        u =  (phi_jac_agent.transpose(-2, -1) @ LKphi_agent.unsqueeze(-1)).squeeze(-1) - damping_u
+        LKphi_agent = (self.laplacian @ (self.K @ phi_agent.unsqueeze(-1)).view_as(Lx).unsqueeze(-1)).squeeze(-1).view(*batch_dims, self.n_agents, self.n_dim)
+        u =  -(phi_jac_agent.transpose(-2, -1) @ LKphi_agent.unsqueeze(-1)).squeeze(-1) - damping_u
 
         return u.view(*batch_dims, self.n_agents*self.n_dim)
