@@ -20,6 +20,7 @@ class DualFrankaPandaBulletEnv(gym.Env):
         super().__init__()
         self.args = args
         self.sim = bclient.BulletClient(connection_mode=p.GUI if args.viz else p.DIRECT)
+        self.sim.setAdditionalSearchPath(pd.getDataPath())
 
         #for the visualizer
         self._cam_dist = 1
@@ -52,6 +53,10 @@ class DualFrankaPandaBulletEnv(gym.Env):
         self.pandaJointTrqLimits = [[-87,   -87,    -87,    -87,    -12,    -12,    -12],
                                     [87,    87,     87,     87,     12,     12,     12]]
 
+        # self.initJointPositions=[0.98, 0.458, 0.31, -2.24, -0.30, 2.66, 2.32, 0.02, 0.02]
+        self.restPositionsLeft=[-0.98, -1.058, 0, -2.24, 0,  2.5, 2.32, 0, 0]
+        self.restPositionsRight=[0.98, -1.058, 0, -2.24, 0, 2.5, 2.32, 0, 0]
+
         self.observation_space = spaces.Box(low=np.array(self.pandaJointLimits[0]+self.pandaJointVelLimits[0]+self.pandaJointLimits[0]+self.pandaJointVelLimits[0]),
                                             high=np.array(self.pandaJointLimits[1]+self.pandaJointVelLimits[1]+self.pandaJointLimits[1]+self.pandaJointVelLimits[1]))
         if args.force_ctrl:
@@ -66,7 +71,6 @@ class DualFrankaPandaBulletEnv(gym.Env):
 
     def load_robots(self):
         #load right and left arms
-        self.sim.setAdditionalSearchPath(pd.getDataPath())
         flags = self.sim.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
         
         right = self.sim.loadURDF("franka_panda/panda.urdf", self.posRight, self.ornRight, useFixedBase=True, flags=flags)
@@ -82,21 +86,18 @@ class DualFrankaPandaBulletEnv(gym.Env):
                         self.pandaNumJoints-1,
                         computeLinkVelocity=1,
                         computeForwardKinematics=1)
-        self.ee_com_pos = result[2] #COM of the end-effector link
+        self.ee_com_pos = [result[2], result[2]] #COM of the end-effector link
 
-        #initial joint position
-        # self.initJointPositions=[0.98, 0.458, 0.31, -2.24, -0.30, 2.66, 2.32, 0.02, 0.02]
-        self.restPositionsLeft=[-0.98, -1.058, 0, -2.24, 0,  2.5, 2.32, 0, 0]
-        self.restPositionsRight=[0.98, -1.058, 0, -2.24, 0, 2.5, 2.32, 0, 0]
-        for i in range(self.pandaNumDofs):    #ignore two finger joints
-            self.sim.setJointMotorControl2(left, self.pandaActuatedJointIndices[i], self.sim.POSITION_CONTROL, self.restPositionsLeft[i],force=5 * 240.)
-            self.sim.setJointMotorControl2(right, self.pandaActuatedJointIndices[i], self.sim.POSITION_CONTROL, self.restPositionsRight[i],force=5 * 240.)
-            
-            #remove joint default spring-damping behavior for force control
-            # if self.args.force_ctrl:
-            #     self.sim.changeDynamics(left, self.pandaActuatedJointIndices[i], linearDamping=0, angularDamping=0)
-            #     self.sim.changeDynamics(right, self.pandaActuatedJointIndices[i], linearDamping=0, angularDamping=0)
         return [left, right]
+    
+    def initialize_robot_pose(self):
+        #initial joint position
+ 
+        for i in range(self.pandaNumDofs):
+            self.sim.resetJointState(self.robots[0], self.pandaActuatedJointIndices[i], self.restPositionsLeft[i], 0)
+            self.sim.resetJointState(self.robots[1], self.pandaActuatedJointIndices[i], self.restPositionsRight[i], 0)
+
+        return
     
     def getMotorJointStates(self, robot):
         joint_states = self.sim.getJointStates(robot, self.pandaActuatedJointIndices)
@@ -107,19 +108,28 @@ class DualFrankaPandaBulletEnv(gym.Env):
     
     def reset(self):
         self.sim.resetSimulation(p.RESET_USE_DEFORMABLE_WORLD)  # FEM deform sim
+        self.sim.setGravity(0, 0, -10.0)
+
+        self.floor_id = self.sim.loadURDF('plane.urdf')
         
         if self.args.viz:  # no rendering during load
             self.sim.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
             
         self.robots = self.load_robots()
 
+        self.initialize_robot_pose()
+
         if self.args.viz:  # loading done, so enable debug rendering if needed
             #time.sleep(0.1)  # wait for debug visualizer to catch up
             self.sim.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
             self.sim.resetDebugVisualizerCamera(cameraDistance=self._cam_dist, cameraYaw=self._cam_yaw, cameraPitch=self._cam_pitch, cameraTargetPosition=self._cam_target_pos)
 
-        for i in range(100):
-            self.sim.stepSimulation()  # step a few steps to get initial state
+        # for i in range(self.pandaNumDofs):    #ignore two finger joints
+        #     self.sim.setJointMotorControl2(self.robots[0], self.pandaActuatedJointIndices[i], self.sim.POSITION_CONTROL, self.restPositionsLeft[i],force=5 * 240.)
+        #     self.sim.setJointMotorControl2(self.robots[1], self.pandaActuatedJointIndices[i], self.sim.POSITION_CONTROL, self.restPositionsRight[i],force=5 * 240.)
+  
+        # for i in range(100):
+        #     self.sim.stepSimulation()  # step a few steps to get initial state
 
         obs = self.get_obs()
         return obs
@@ -211,7 +221,7 @@ class DualFrankaPandaTaskTranslationBulletEnv(DualFrankaPandaBulletEnv):
         left_p, _, _ = self.getMotorJointStates(self.robots[0])
         right_p, _, _ = self.getMotorJointStates(self.robots[1])
         agent_pos = [left_p, right_p]
-        jac_lst = [self.sim.calculateJacobian(id, self.pandaNumJoints-1, self.ee_com_pos, agent_pos[i], zero_vec, zero_vec) for i, id in enumerate(self.robots)]
+        jac_lst = [self.sim.calculateJacobian(id, self.pandaNumJoints-1, self.ee_com_pos[i], agent_pos[i], zero_vec, zero_vec) for i, id in enumerate(self.robots)]
         jac_t_lst = [np.array(j[0])[:, :-2].astype(float) for j in jac_lst]
         jac_r_lst = [np.array(j[1])[:, :-2].astype(float) for j in jac_lst]
         return jac_t_lst, jac_r_lst
@@ -242,7 +252,6 @@ class DualFrankaPandaTaskTranslationBulletEnv(DualFrankaPandaBulletEnv):
 
     def reset(self):
         super().reset()
-
         #record desired orientations, quaternion (x,y,z,w)
         self.desiredOrnLeft = np.array(self.sim.getLinkState(self.robots[0],
                         self.pandaNumDofs-1,
@@ -304,4 +313,50 @@ class DualFrankaPandaTaskTranslationBulletEnv(DualFrankaPandaBulletEnv):
 
             super().step(np.concatenate(dqs))
         return 
+
+class DualFrankaPandaAssemblyBulletEnv(DualFrankaPandaTaskTranslationBulletEnv):
+    """
+    Two frankas manipulate two rigidly attached objects and assemble them to achieve some relative pose
+    """
+    def __init__(self, args) -> None:
+        super().__init__(args)
+    
+
+    def load_objects(self):
+        """
+        load and attach objects to each Franka hand
+        """
+        arm_ee_state = [self.sim.getLinkState(id,
+                        self.pandaNumJoints-1,
+                        computeLinkVelocity=1,
+                        computeForwardKinematics=0) for id in self.robots]
+
+        #a cylinder in the right hand
+        cylinder_radius = 0.023
+        cylinder_height = 0.08
+        cylinder_colid = self.sim.createCollisionShape(self.sim.GEOM_CYLINDER, radius=cylinder_radius, height=cylinder_height)
+        self.cylinder = self.sim.createMultiBody(0.1, cylinder_colid, basePosition=arm_ee_state[1][0], baseOrientation=arm_ee_state[1][1])
         
+        #a cup in the left hand
+        self.cup = self.sim.loadURDF('objects/mug.urdf', arm_ee_state[0][0], arm_ee_state[0][1])
+
+        self.sim.changeVisualShape(self.cup, -1, rgbaColor=[1, 0, 0, 0.3])
+        
+        return
+    
+    def reset(self):
+        super().reset()
+
+        #randomize initial pose here
+
+        #load objects and attach them
+        self.load_objects()
+        #this is probably a bad idea since we need extra care to the end-effector link jacobian and gravity compensation
+        #another idea is using URDFEditor to join the object to the robot, we need to overload load_robots and reset
+        #and prepare URDF files for two objects
+        #see https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/gym/pybullet_utils/examples/combineUrdf.py
+        return self.get_obs()
+    
+    def get_obs(self):
+        #TODO may need an offset from the raw end-effectors
+        return super().get_obs()
