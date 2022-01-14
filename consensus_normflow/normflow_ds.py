@@ -269,6 +269,7 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
         x_dot = [batch_dims, n_agents*n_dim]
 
         u = -J^T@L@K@phi(L@x) - J^TDJx_dot
+        u = -L@J^T@K@phi(L@x) - J^TDJx_dot?
         """
         batch_dims = x.size()[:-1]
         Lx = torch.matmul(self.laplacian, x.unsqueeze(-1)).squeeze(-1)
@@ -287,7 +288,11 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
         damping_u = (damping @ (x_dot.view(*batch_dims, self.n_agents, self.n_dim).unsqueeze(-1))).squeeze(-1)
 
         #L@K@phi(Lx) and convert it to agent-wise tensor (batch_dims, n_agents, n_dim)
-        LKphi_agent = (self.laplacian @ (self.K @ phi_agent.unsqueeze(-1)).view_as(Lx).unsqueeze(-1)).squeeze(-1).view(*batch_dims, self.n_agents, self.n_dim)
-        u =  -(phi_jac_agent.transpose(-2, -1) @ LKphi_agent.unsqueeze(-1)).squeeze(-1) - damping_u
+        #LKphi_agent = (self.laplacian @ (self.K @ phi_agent.unsqueeze(-1)).view_as(Lx).unsqueeze(-1)).squeeze(-1).view(*batch_dims, self.n_agents, self.n_dim)
+        #u =  -(phi_jac_agent.transpose(-2, -1) @ LKphi_agent.unsqueeze(-1)).squeeze(-1) - damping_u
+
+        JKphi_agent = (phi_jac_agent.transpose(-2, -1) @ (self.K @ phi_agent.unsqueeze(-1)))
+        # print(JKphi_agent.shape, JKphi_agent.view_as(Lx).shape)
+        u = - (self.laplacian @ JKphi_agent.view_as(Lx).unsqueeze(-1)).squeeze(-1).view(*batch_dims, self.n_agents, self.n_dim) - damping_u
 
         return u.view(*batch_dims, self.n_agents*self.n_dim)
