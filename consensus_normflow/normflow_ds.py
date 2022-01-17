@@ -239,10 +239,13 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
         #K and D must be a list of positive numbers, fix them not for learning for now
         if K is None:
             K = torch.ones(n_dim)
+            K_scalar = 1
         elif isinstance(K, (int, float)):
+            K_scalar = K
             K = torch.ones(n_dim) * K
-
+            
         self.register_buffer('K', torch.diag(K).unsqueeze(0).repeat(n_agents, 1, 1))
+        self.register_buffer('K_scalar', torch.tensor(K_scalar))
 
         if D is None:
             D = torch.ones(n_dim)
@@ -254,6 +257,19 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
         self.n_dim = n_dim
         self.n_agents = n_agents
 
+        self.init_phi()
+        return
+
+    def init_phi(self):
+        def param_init(m):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                torch.nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    torch.nn.init.zeros_(m.bias)
+        
+        self.phi.apply(param_init)
+        return
+
     def forward(self, x):
         """
         x are batched tensors
@@ -262,13 +278,14 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
 
         return NotImplementedError
     
-    def forward_2ndorder(self, x, x_dot, jac_damping=True):
+    def forward_2ndorder_deprecated(self, x, x_dot, jac_damping=True):
         """
         x, x_dot are batched tensors
         x = [batch_dims, n_agents*n_dim]
         x_dot = [batch_dims, n_agents*n_dim]
 
-        u = -J^T@L@K@phi(L@x) - J^TDJx_dot
+        note for realnvp we already have phi(0) = 0
+        ***scratched u = -J^T@L@K@phi(L@x) - J^TDJx_dot***
         u = -L@J^T@K@phi(L@x) - J^TDJx_dot?
         """
         batch_dims = x.size()[:-1]
@@ -291,8 +308,38 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
         #LKphi_agent = (self.laplacian @ (self.K @ phi_agent.unsqueeze(-1)).view_as(Lx).unsqueeze(-1)).squeeze(-1).view(*batch_dims, self.n_agents, self.n_dim)
         #u =  -(phi_jac_agent.transpose(-2, -1) @ LKphi_agent.unsqueeze(-1)).squeeze(-1) - damping_u
 
-        JKphi_agent = (phi_jac_agent.transpose(-2, -1) @ (self.K @ phi_agent.unsqueeze(-1)))
+        JKphi_agent = phi_jac_agent.transpose(-2, -1) @ (self.K @ phi_agent.unsqueeze(-1))
         # print(JKphi_agent.shape, JKphi_agent.view_as(Lx).shape)
         u = - (self.laplacian @ JKphi_agent.view_as(Lx).unsqueeze(-1)).squeeze(-1).view(*batch_dims, self.n_agents, self.n_dim) - damping_u
+
+        return u.view(*batch_dims, self.n_agents*self.n_dim)
+    
+    def forward_2ndorder(self, x, x_dot, jac_damping=True):
+        """
+        x, x_dot are batched tensors
+        x = [batch_dims, n_agents*n_dim]
+        x_dot = [batch_dims, n_agents*n_dim]
+
+        u = -J^T@L@phi(x) - J^TDJx_dot    -   K is diagonal
+        """
+        batch_dims = x.size()[:-1]
+        x_agent = x.view(*batch_dims, self.n_agents, self.n_dim)
+        phi = self.phi(x_agent.view(-1, self.n_dim))    #(batch_dims * n_agents, n_dim)
+        phi_agent = phi.view(*batch_dims, self.n_agents, self.n_dim)
+
+        #agent-wise jacobian (batch_dims, n_agents, n_dim, n_dim)
+        phi_jac_agent = jacobian_in_batch(phi, x).view(*batch_dims, self.n_agents, self.n_dim, self.n_dim)
+
+        if jac_damping:
+            damping = phi_jac_agent.transpose(-2, -1) @ self.D @ phi_jac_agent
+        else:
+            damping = self.D.clone()
+
+        damping_u = (damping @ (x_dot.view(*batch_dims, self.n_agents, self.n_dim).unsqueeze(-1))).squeeze(-1)
+
+        Lphi = self.laplacian @ phi_agent.view(*batch_dims, self.n_agents*self.n_dim).unsqueeze(-1)  #(batch_dims, n_agents*n_dim, 1)
+        JLphi_agent = (phi_jac_agent.transpose(-2, -1) @ Lphi.view(*batch_dims, self.n_agents, self.n_dim, 1)).squeeze(-1)    #(batch_dims, n_agents, n_dim)
+
+        u = -self.K_scalar*JLphi_agent - damping_u
 
         return u.view(*batch_dims, self.n_agents*self.n_dim)
