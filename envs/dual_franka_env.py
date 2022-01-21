@@ -1,10 +1,9 @@
-from turtle import right
+import os
 import numpy as np
 
 import gym
 from gym import spaces, logger
 from gym.utils import seeding
-from numpy.core.defchararray import array, join
 
 import pybullet as p
 import pybullet_data as pd
@@ -316,6 +315,8 @@ class DualFrankaPandaTaskTranslationBulletEnv(DualFrankaPandaBulletEnv):
             super().step(np.concatenate(dqs))
         return 
 
+from .utils import BulletDebugFrameDrawer
+
 class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
     """
     Two frankas manipulate two rigidly attached objects and coordinate them to achieve some relative pose
@@ -342,6 +343,10 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         self.restPositionsLeft = [-0.14478729478453345, -0.9184881776305733, -0.2018129493638807, -2.631694412176634, -1.7707712904694894, 1.8102247072763602, 2.512651511166867, 0.015, 0.015] #open gripper a bit for avoid collision
         self.restPositionsRight = [0.2584990522331347, -0.6474235673406391, 0.2818125550604209, -1.574409341395127, 0.20990817572737575, 0.9757974029681046, 1.3900018760902164, 0.0, 0.0]
 
+        #time steps of an episode
+        self.horizon = 200
+        self.t = 0
+
     def load_objects(self):
         """
         load and attach objects to each Franka hand
@@ -350,6 +355,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         self.objects_cons = [None, None]
         self.objects_mass = [None, None]
         self.objects_com_pos = [None, None]
+        self.objects_debug_drawers = [None, None]
 
         arm_ee_state = [self.sim.getLinkState(id,
                         self.pandaNumJoints-1-self.handlinkID_offset,
@@ -368,9 +374,9 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         object_pos, object_quat = self.sim.multiplyTransforms(arm_ee_state[1][0], arm_ee_state[1][1], obj_offset_to_parent_com, [0, 0, 0, 1])
         
         cylinder_radius = 0.023
-        cylinder_height = 0.08
+        self.cylinder_height = 0.08
         cylinder_mass = 0.1
-        cylinder_colid = self.sim.createCollisionShape(self.sim.GEOM_CYLINDER, radius=cylinder_radius, height=cylinder_height)
+        cylinder_colid = self.sim.createCollisionShape(self.sim.GEOM_CYLINDER, radius=cylinder_radius, height=self.cylinder_height)
         self.objects[1] = self.sim.createMultiBody(cylinder_mass, cylinder_colid, basePosition=object_pos, baseOrientation=object_quat)
         
         self.objects_cons[1] = self.sim.createConstraint(self.robots[1], self.pandaNumJoints-1-self.handlinkID_offset, self.objects[1], -1, 
@@ -381,6 +387,8 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
                                 )
         self.objects_mass[1] = cylinder_mass
 
+        self.objects_debug_drawers[1] = BulletDebugFrameDrawer(self.sim)
+
         #==========================object in the left hand=========================#
         #a cup in the left hand
         obj_offset_to_parent_com = [0.01, -0.03, 0.08]
@@ -390,7 +398,12 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         #object com offset to attached link joint, for future jacobian computation
         self.objects_com_pos[0] = (np.array(obj_offset_to_parent_com) + np.array(self.attach_link_com_pos[0])).tolist()
 
-        self.objects[0] = self.sim.loadURDF('assets/socket.xml', object_pos, object_quat)
+        #local assets
+        data_path = os.path.join(os.path.split(__file__)[0], 'assets')
+        
+        self.sim.setAdditionalSearchPath(data_path)
+
+        self.objects[0] = self.sim.loadURDF('socket.xml', object_pos, object_quat)
 
         self.sim.changeVisualShape(self.objects[0], -1, rgbaColor=[1, 0, 0, 0.3])
 
@@ -408,11 +421,13 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         # self.sim.setCollisionFilterPair(self.objects[0], self.robots[0], -1, self.pandaNumJoints-3, enableCollision=0)
 
         self.objects_mass[0] = 0.05   #from the URDF
+
+        self.objects_debug_drawers[0] = BulletDebugFrameDrawer(self.sim)
         return
     
     def initialize_task_poses(self):
         #reset initial task poses, can be randomized
-        left_pos = [0.25, 0.5, 0.6]
+        left_pos = [0.25, 0.5, 0.4]
         right_pos = [0.25, 0.24, 0.8]
 
         left_quat = self.sim.getQuaternionFromEuler([np.pi/2, -np.pi/2, 0])
@@ -421,8 +436,8 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         left_joints = self.sim.calculateInverseKinematics(self.robots[0], self.pandaNumJoints-1, left_pos, left_quat)
         right_joints = self.sim.calculateInverseKinematics(self.robots[1], self.pandaNumJoints-1, right_pos, right_quat)
 
-        print(left_joints)
-        print(right_joints)
+        # print(left_joints)
+        # print(right_joints)
 
         for i in range(self.pandaNumDofs):
             self.sim.resetJointState(self.robots[0], self.pandaActuatedJointIndices[i], left_joints[i], 0)
@@ -449,6 +464,9 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         self.desiredOrnLeft = np.array(self.sim.getBasePositionAndOrientation(self.objects[0])[1])
         self.desiredOrnRight = np.array(self.sim.getBasePositionAndOrientation(self.objects[1])[1])
 
+        #reset tick
+        self.t = 0
+
         return self.get_obs()
     
     def get_obs(self):
@@ -459,7 +477,10 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
     def get_object_pos_and_vel(self):
         #return end-effector position and velocities
         object_states = [self.sim.getBasePositionAndOrientation(id) for id in self.objects]
-        object_velocities = [self.sim.getBaseVelocity(id) for id in self.objects]
+        #we need some extra treatment to cylinder to put interest point at the bottom
+        object_states[1] = self.sim.multiplyTransforms(object_states[1][0], object_states[1][1], [0, 0, self.cylinder_height/2], [1, 0, 0, 0])
+        #we probably need to account for rotational effects on the bottom of cylider point but if rotational controller is doing a good job...
+        object_velocities = [self.sim.getBaseVelocity(id) for id in self.objects]   
         object_trans = [s[0]+v[0] for s, v in zip(object_states, object_velocities)]
         return object_trans
 
@@ -530,7 +551,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
             trans_control_left = a[:3].dot(jac_t_lst[0])
             trans_control_right = a[3:].dot(jac_t_lst[1])
 
-            kr = 1   #1 leads to instability...
+            kr = 3   #solely stiffness leads to instability, may need some damping
             kd = 0.1
             #augment some joint damping for stablizing the system
             rot_control_left = kr*rot_control_left - kd*np.array(left_v)[:-2]
@@ -550,6 +571,37 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
             dqs = [self.pseudo_inverse_control(jac, err) for jac, err in zip(jacs, errs)]
 
             super().step(np.concatenate(dqs))
-        # print(super().get_obs())
-        return
+        
+        # update object poses in debug
+        obs = np.array(self.get_obs())
+
+        if self.args.debug:
+            pos = [obs[:3].tolist(), obs[6:9].tolist()]
+            quat = self.get_object_rot()
+
+            for d, p, q in zip(self.objects_debug_drawers, pos, quat):
+                d.update_drawing(p, q, scale=0.1)
+
+        self.t += 1
+        done = False
+
+        #calculate reward as the negative of difference
+        running_pos_err = np.linalg.norm(obs[:3]-obs[6:9])  
+        running_vel_err = (np.linalg.norm(obs[3:6])+np.linalg.norm(obs[9:]))*0.1    #scale for velocity component
+        running_ctrl_efforts = (np.linalg.norm(a[:3])+np.linalg.norm(a[3:]))*0.001  #scale for control penalty
+        reward = -running_pos_err-running_vel_err-running_ctrl_efforts
+
+        success = False
+
+        if self.t >= self.horizon:
+            terminal_err = np.linalg.norm(obs[:3]-obs[6:9])*10                                                      #scale for the terminal part
+            reward -= terminal_err
+            if terminal_err < 1e-3:
+                success = True
+
+        return obs, reward, done, dict( reward_pos=-running_pos_err, 
+                                        reward_vel=-running_vel_err, 
+                                        reward_ctrl=-running_ctrl_efforts,
+                                        success=success
+                                        )
     

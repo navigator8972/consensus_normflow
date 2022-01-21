@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-import flow
+from .flow import RealNVP, FCNN
 
 class QuadraticPotentialFunction(nn.Module):
 
@@ -68,7 +68,7 @@ class NormalizingFlowDynamicalSystem(nn.Module):
     
     def __init__(self, dim=2, n_flows=3, hidden_dim=8, K=None, D=None, device='cpu'):
         super().__init__()
-        self.flows = [flow.RealNVP(dim, hidden_dim=hidden_dim, base_network=flow.FCNN) for i in range(n_flows)]
+        self.flows = [RealNVP(dim, hidden_dim=hidden_dim, base_network=FCNN) for i in range(n_flows)]
         self.phi = nn.Sequential(*self.flows)
         self.potential = QuadraticPotentialFunction(feature=self.phi)
         self.dim = dim
@@ -221,7 +221,7 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
     def __init__(self, n_dim=2, n_agents=2, n_flows=3, hidden_dim=8, L=None, K=None, D=None):
         super().__init__()
         if n_flows > 0:
-            flows = [flow.RealNVP(n_dim, hidden_dim=hidden_dim, base_network=flow.FCNN) for i in range(n_flows)]
+            flows = [RealNVP(n_dim, hidden_dim=hidden_dim, base_network=FCNN) for i in range(n_flows)]
             self.phi = nn.Sequential(*flows)
         else:
             #linear version as the special case
