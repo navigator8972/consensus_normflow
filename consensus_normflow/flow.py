@@ -70,3 +70,41 @@ class RealNVP(nn.Module):
         #           torch.sum(-s2_transformed, dim=1)
         # return x, log_det
         return x
+
+class RealNVPReflection(RealNVP):
+    #a realnvp network that is equivariant under reflection so phi(x) = -phi(-x)
+    def __init__(self, dim, hidden_dim=8, base_network=FCNN):
+        super().__init__(dim, hidden_dim, base_network)
+    
+    def forward(self, x):
+        lower, upper = x[:,:self.Dlo], x[:,self.Dlo:] # todo
+        # lower, upper = x[...,:self.Dlo], x[...,self.Dlo:]
+        # lower, upper = x[:, :self.dim//2], x[:, self.dim//2:]
+        #extend s'(x) = s(x) + s(-x) and t'(x) = t(x) - t(-x) to have invariant s and equivariant t
+        t1_transformed = self.t1(lower) - self.t1(-lower)
+        s1_transformed = (self.s1(lower) + self.s1(-lower))/2 
+        upper = t1_transformed + upper * torch.exp(s1_transformed)
+        t2_transformed = self.t2(upper) - self.t2(-upper)
+        s2_transformed = (self.s2(upper) + self.s2(-upper))/2
+        lower = t2_transformed + lower * torch.exp(s2_transformed)
+        z = torch.cat([lower, upper], dim=-1)
+        # log_det = torch.sum(s1_transformed, dim=1) + \
+        #           torch.sum(s2_transformed, dim=1)
+        # return z, log_det
+        return z
+
+    def inverse(self, z):
+        lower, upper = z[:,:self.D // 2], z[:,self.D // 2:]
+        # lower, upper = z[...,:self.D // 2], z[...,self.D // 2:]
+        #extend s'(x) = s(x) + s(-x) and t'(x) = t(x) - t(-x) to have invariant s and equivariant t
+        t2_transformed = self.t2(upper) - self.t2(-upper)
+        s2_transformed = (self.s2(upper)+self.s2(-upper))/2
+        lower = (lower - t2_transformed) * torch.exp(-s2_transformed)
+        t1_transformed = self.t1(lower) - self.t1(-lower)
+        s1_transformed = (self.s1(lower) + self.s1(-lower))/2
+        upper = (upper - t1_transformed) * torch.exp(-s1_transformed)
+        x = torch.cat([lower, upper], dim=-1)
+        # log_det = torch.sum(-s1_transformed, dim=1) + \
+        #           torch.sum(-s2_transformed, dim=1)
+        # return x, log_det
+        return x

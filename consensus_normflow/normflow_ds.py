@@ -278,7 +278,7 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
 
         return NotImplementedError
     
-    def forward_2ndorder_deprecated(self, x, x_dot, jac_damping=True):
+    def forward_2ndorder_Lx(self, x, x_dot, jac_damping=True):
         """
         x, x_dot are batched tensors
         x = [batch_dims, n_agents*n_dim]
@@ -343,3 +343,19 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
         u = -self.K_scalar*JLphi_agent - damping_u
 
         return u.view(*batch_dims, self.n_agents*self.n_dim)
+
+from .flow import RealNVPReflection
+
+class ConsensusDuoNormalizingFlowDynamics(ConsensusNormalizingFlowDynamics):
+    #a special case of ConsensusNormalizingFlowDynamics with n=2 and equivariant flows
+    def __init__(self, n_dim=2, n_flows=3, hidden_dim=8, L=None, K=None, D=None):
+        super().__init__(n_dim, 2, n_flows, hidden_dim, L, K, D)
+
+        if n_flows > 0:
+            #need to overwriting the default normalizing-flow NN
+            flows = [RealNVPReflection(n_dim, hidden_dim=hidden_dim, base_network=FCNN) for i in range(n_flows)]
+            self.phi = nn.Sequential(*flows)
+    
+    def forward_2ndorder(self, x, x_dot, jac_damping=True):
+        #for this we can call the deprecated form for translational invariance
+        return super().forward_2ndorder_Lx(x, x_dot, jac_damping)
