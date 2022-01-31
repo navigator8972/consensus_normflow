@@ -10,17 +10,20 @@ from consensus_normflow.consensus_normflow.normflow_ds import ConsensusNormalizi
 
 def main(args):
     # nfds = ConsensusNormalizingFlowDynamics(n_dim=3, n_agents=2, n_flows=1, K=4)
-    nfds = ConsensusDuoNormalizingFlowDynamics(n_dim=3, n_flows=1, K=4)
+    nfds = ConsensusDuoNormalizingFlowDynamics(n_dim=3, n_flows=1, K=30)
 
     env = DualFrankaPandaObjectsBulletEnv(args)
     env.reset()
-    while True:
+    r = 0
+    while env.t < 250:
         obs = env.get_obs() #[agent1_pos, agent1_vel, agent2_pos, agent2_vel]
         pos = torch.from_numpy(np.concatenate((obs[:3], obs[6:9]))).unsqueeze(0).float()
         pos.requires_grad = True
         vel = torch.from_numpy(np.concatenate((obs[3:6], obs[9:]))).unsqueeze(0).float()
         a = nfds.forward_2ndorder(pos, vel).detach().squeeze(0).numpy()
-        env.step(a)
+        obs, reward, done, info = env.step(a)
+        r += reward
+    print('Return:', r)
     return
 
 

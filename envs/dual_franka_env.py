@@ -20,7 +20,7 @@ class DualFrankaPandaBulletEnv(gym.Env):
         super().__init__()
         self.args = args
         self.sim = bclient.BulletClient(connection_mode=p.GUI if args.viz else p.DIRECT)
-        self.sim.setAdditionalSearchPath(pd.getDataPath())
+        
 
         #for the visualizer
         self._cam_dist = 1
@@ -109,6 +109,7 @@ class DualFrankaPandaBulletEnv(gym.Env):
         self.sim_gravity = -10.0
         self.sim.setGravity(0, 0, self.sim_gravity)
 
+        self.sim.setAdditionalSearchPath(pd.getDataPath())
         self.floor_id = self.sim.loadURDF('plane.urdf')
         
         if self.args.viz:  # no rendering during load
@@ -551,8 +552,8 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
             trans_control_left = a[:3].dot(jac_t_lst[0])
             trans_control_right = a[3:].dot(jac_t_lst[1])
 
-            kr = 3   #solely stiffness leads to instability, may need some damping
-            kd = 0.1
+            kr = 20   #solely stiffness leads to instability, may need some damping
+            kd = 1
             #augment some joint damping for stablizing the system
             rot_control_left = kr*rot_control_left - kd*np.array(left_v)[:-2]
             rot_control_right = kr*rot_control_right - kd*np.array(right_v)[:-2]
