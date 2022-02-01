@@ -28,7 +28,6 @@ class DualFrankaPandaBulletEnv(gym.Env):
         self._cam_pitch=-30
         self._cam_roll=0
         self._cam_target_pos = [0.25, 0.5, 0.5]
-        self._cam_res = [256, 256]
         self.sim.resetDebugVisualizerCamera(cameraDistance=self._cam_dist, cameraYaw=self._cam_yaw, cameraPitch=self._cam_pitch, cameraTargetPosition=self._cam_target_pos)
         self._cam_mat = self.sim.computeViewMatrixFromYawPitchRoll(
             cameraTargetPosition=self._cam_target_pos, distance=self._cam_dist, yaw=self._cam_yaw, pitch=self._cam_pitch, roll=self._cam_roll, upAxisIndex=2
@@ -159,15 +158,15 @@ class DualFrankaPandaBulletEnv(gym.Env):
         self.sim.stepSimulation()
         return
 
-    def render(self, mode='rgb_array'):
-        (_, _, px, _, _) = self.sim.getCameraImage(width=self._cam_res[0],
-                                              height=self._cam_res[1],
+    def render(self, mode='rgb_array', width=256, height=256):
+        (_, _, px, _, _) = self.sim.getCameraImage(width=width,
+                                              height=height,
                                               viewMatrix=self._cam_mat,
                                               projectionMatrix=self._cam_proj_mat,
                                               renderer=p.ER_BULLET_HARDWARE_OPENGL)
 
         rgb_array = np.array(px, dtype=np.uint8)
-        rgb_array = np.reshape(rgb_array, (self._cam_res[0],self._cam_res[1], 4))
+        rgb_array = np.reshape(rgb_array, (width,height, 4))
 
         rgb_array = rgb_array[:, :, :3]
         return rgb_array
