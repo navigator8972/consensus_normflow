@@ -431,6 +431,11 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         left_pos = [0.25, 0.5, 0.4]
         right_pos = [0.25, 0.24, 0.8]
 
+        box_size = 0.1
+
+        left_pos = (np.array(left_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
+        right_pos = (np.array(right_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
+
         left_quat = self.sim.getQuaternionFromEuler([np.pi/2, -np.pi/2, 0])
         right_quat = self.sim.getQuaternionFromEuler([np.pi, 0, 0])
 
