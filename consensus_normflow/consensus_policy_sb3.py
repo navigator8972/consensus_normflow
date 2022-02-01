@@ -1,6 +1,6 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
-from cv2 import mean
 
+import numpy as np
 import gym
 import torch as th
 from torch import nn
@@ -123,4 +123,55 @@ class ConsensusNormalizingflowACPolicy(ActorCriticPolicy):
         # latent_pi = self.mlp_extractor.forward_actor(features)
         return self._get_action_dist_from_latent(obs)   #use raw obs as we dont need mlp processed feature for policy
 
+    def predict(
+        self,
+        observation: Union[np.ndarray, Dict[str, np.ndarray]],
+        state: Optional[Tuple[np.ndarray, ...]] = None,
+        episode_start: Optional[np.ndarray] = None,
+        deterministic: bool = False,
+    ) -> Tuple[np.ndarray, Optional[Tuple[np.ndarray, ...]]]:
+        """
+        Get the policy action from an observation (and optional hidden state).
+        Includes sugar-coating to handle different observations (e.g. normalizing images).
+        :param observation: the input observation
+        :param state: The last hidden states (can be None, used in recurrent policies)
+        :param episode_start: The last masks (can be None, used in recurrent policies)
+            this correspond to beginning of episodes,
+            where the hidden states of the RNN must be reset.
+        :param deterministic: Whether or not to return deterministic actions.
+        :return: the model's action and the next hidden state
+            (used in recurrent policies)
+        """
+        # TODO (GH/1): add support for RNN policies
+        # if state is None:
+        #     state = self.initial_state
+        # if episode_start is None:
+        #     episode_start = [False for _ in range(self.n_envs)]
+        # Switch to eval mode (this affects batch norm / dropout)
+        self.set_training_mode(False)
 
+        observation, vectorized_env = self.obs_to_tensor(observation)
+        # observation.float() #force to use float for normflow computation
+
+        with th.no_grad():
+            actions = self._predict(observation, deterministic=deterministic)
+        # Convert to numpy
+        # actions = actions.cpu().numpy()
+        actions = actions.cpu().detach().numpy()    # we need to detach because grad is turned on for jacobian
+                                                    # and predict will only be used for evaluation so it should be safe 
+
+
+        if isinstance(self.action_space, gym.spaces.Box):
+            if self.squash_output:
+                # Rescale to proper domain when using squashing
+                actions = self.unscale_action(actions)
+            else:
+                # Actions could be on arbitrary scale, so clip the actions to avoid
+                # out of bound error (e.g. if sampling from a Gaussian distribution)
+                actions = np.clip(actions, self.action_space.low, self.action_space.high)
+
+        # Remove batch dimension if needed
+        if not vectorized_env:
+            actions = actions[0]
+
+        return actions, state
