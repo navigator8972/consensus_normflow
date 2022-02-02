@@ -315,13 +315,17 @@ class DualFrankaPandaTaskTranslationBulletEnv(DualFrankaPandaBulletEnv):
             super().step(np.concatenate(dqs))
         return 
 
+import argparse
 from .utils import BulletDebugFrameDrawer
 
 class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
     """
     Two frankas manipulate two rigidly attached objects and coordinate them to achieve some relative pose
     """
-    def __init__(self, args) -> None:
+    def __init__(self, args=None) -> None:
+        if args is None:
+            #default parameters for creating envs
+            args = argparse.Namespace(viz=False, force_ctrl=True, debug=False)
         super().__init__(args)
 
         #override state and action space for a task representation with only translation component
@@ -334,7 +338,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         self.observation_space = spaces.Box(np.concatenate((low_left, low_right)), np.concatenate((high_left, high_right)))
 
         #act: force
-        self.action_space = spaces.Box(-30*np.ones(6), 30*np.ones(6))
+        self.action_space = spaces.Box(-10*np.ones(6), 10*np.ones(6))
 
         #offset for ignoring hand, 0 for using the last finger
         self.handlinkID_offset = 2
@@ -344,7 +348,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         self.restPositionsRight = [0.2584990522331347, -0.6474235673406391, 0.2818125550604209, -1.574409341395127, 0.20990817572737575, 0.9757974029681046, 1.3900018760902164, 0.0, 0.0]
 
         #time steps of an episode
-        self.horizon = 200
+        self.horizon = 350
         self.t = 0
 
     def load_objects(self):
@@ -430,7 +434,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         left_pos = [0.25, 0.5, 0.4]
         right_pos = [0.25, 0.24, 0.8]
 
-        box_size = 0.1
+        box_size = 0.0
 
         left_pos = (np.array(left_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
         right_pos = (np.array(right_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
@@ -591,9 +595,9 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         done = False
 
         #calculate reward as the negative of difference
-        running_pos_err = np.linalg.norm(obs[:3]-obs[6:9])  
-        running_vel_err = (np.linalg.norm(obs[3:6])+np.linalg.norm(obs[9:]))*0.1    #scale for velocity component
-        running_ctrl_efforts = (np.linalg.norm(a[:3])+np.linalg.norm(a[3:]))*0.001  #scale for control penalty
+        running_pos_err = np.linalg.norm(obs[:3]-obs[6:9]) * 0.1 
+        running_vel_err = (np.linalg.norm(obs[3:6])+np.linalg.norm(obs[9:]))*0.01    #scale for velocity component
+        running_ctrl_efforts = (np.linalg.norm(a[:3])+np.linalg.norm(a[3:]))*1e-4  #scale for control penalty
         reward = -running_pos_err-running_vel_err-running_ctrl_efforts
 
         success = False

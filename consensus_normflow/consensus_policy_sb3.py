@@ -41,10 +41,12 @@ class ConsensusNormalizingflowACPolicy(ActorCriticPolicy):
         )
 
         #replace action_net with normflow_ds
-        self.normflow_ds = ConsensusDuoNormalizingFlowDynamics(n_dim=self.features_dim//4, n_flows=2, K=30, D=1)
+        self.normflow_ds = ConsensusDuoNormalizingFlowDynamics(n_dim=self.features_dim//4, n_flows=2, hidden_dim=16, K=25, D=1)
+
         #also remember to overwrite optimizer to ensure normflow parameters are added
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
+        
     def _get_latent(self, obs: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Get the latent code (i.e., activations of the last layer of each network)
@@ -151,7 +153,6 @@ class ConsensusNormalizingflowACPolicy(ActorCriticPolicy):
         self.set_training_mode(False)
 
         observation, vectorized_env = self.obs_to_tensor(observation)
-        # observation.float() #force to use float for normflow computation
 
         with th.no_grad():
             actions = self._predict(observation, deterministic=deterministic)
@@ -159,8 +160,6 @@ class ConsensusNormalizingflowACPolicy(ActorCriticPolicy):
         # actions = actions.cpu().numpy()
         actions = actions.cpu().detach().numpy()    # we need to detach because grad is turned on for jacobian
                                                     # and predict will only be used for evaluation so it should be safe 
-
-
         if isinstance(self.action_space, gym.spaces.Box):
             if self.squash_output:
                 # Rescale to proper domain when using squashing

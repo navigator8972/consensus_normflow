@@ -17,7 +17,7 @@ def main(args):
     env = DualFrankaPandaObjectsBulletEnv(args)
     env.reset()
 
-    policy = ConsensusNormalizingflowACPolicy(observation_space=env.observation_space, action_space=env.action_space)
+    policy = ConsensusNormalizingflowACPolicy(observation_space=env.observation_space, action_space=env.action_space, log_std_init=1.)
 
     r = 0
     while env.t < 400:
@@ -28,9 +28,9 @@ def main(args):
         # a = nfds.forward_2ndorder(pos, vel).detach().squeeze(0).numpy()
 
         obs_np = np.expand_dims(obs, axis=0).astype(np.float32)
-        action, state_ = policy.predict(obs_np, deterministic=True)
+        action, state_ = policy.predict(obs_np, deterministic=False)
         a = action[0]   #only one batch size
-
+        print(a)
         obs, reward, done, info = env.step(a)
         r += reward
     print('Return:', r)

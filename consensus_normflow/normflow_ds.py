@@ -234,6 +234,7 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
             L = L / n_agents    #normalize laplacian to prevent numerical explosion?
 
         laplacian = torch.kron(L, torch.eye(n_dim))
+
         self.register_buffer('laplacian', laplacian)
 
         #K and D must be a list of positive numbers, fix them not for learning for now
@@ -256,6 +257,10 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
 
         self.n_dim = n_dim
         self.n_agents = n_agents
+
+        # print(laplacian.dtype)
+        # print(self.K.dtype)
+        # print(self.D.dtype)
 
         self.init_phi()
         return
@@ -288,6 +293,7 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
         ***scratched u = -J^T@L@K@phi(L@x) - J^TDJx_dot***
         u = -L@J^T@K@phi(L@x) - J^TDJx_dot?
         """
+        # print(x.dtype, self.laplacian.dtype)
         batch_dims = x.size()[:-1]
         Lx = torch.matmul(self.laplacian, x.unsqueeze(-1)).squeeze(-1)
         Lx_agent = Lx.view(*batch_dims, self.n_agents, self.n_dim)
@@ -358,4 +364,5 @@ class ConsensusDuoNormalizingFlowDynamics(ConsensusNormalizingFlowDynamics):
     
     def forward_2ndorder(self, x, x_dot, jac_damping=True):
         #for this we can call the deprecated form for translational invariance
-        return super().forward_2ndorder_Lx(x, x_dot, jac_damping)
+        #force to use float for the computation with constant tensors like laplacian, K and D
+        return super().forward_2ndorder_Lx(x.float(), x_dot.float(), jac_damping)   
