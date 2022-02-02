@@ -20,7 +20,7 @@ def main(args):
     policy = ConsensusNormalizingflowACPolicy(observation_space=env.observation_space, action_space=env.action_space)
 
     r = 0
-    while env.t < 5000:
+    while env.t < 400:
         obs = env.get_obs() #[agent1_pos, agent1_vel, agent2_pos, agent2_vel]
         # pos = torch.from_numpy(np.concatenate((obs[:3], obs[6:9]))).unsqueeze(0).float()
         # pos.requires_grad = True
