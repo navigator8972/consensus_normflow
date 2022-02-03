@@ -19,24 +19,11 @@ class DualFrankaPandaBulletEnv(gym.Env):
     def __init__(self, args) -> None:
         super().__init__()
         self.args = args
-        self.sim = bclient.BulletClient(connection_mode=p.GUI if args.viz else p.DIRECT)
-        
+        self.isRendering = args.viz
 
-        #for the visualizer
-        self._cam_dist = 1
-        self._cam_yaw = 90
-        self._cam_pitch=-30
-        self._cam_roll=0
-        self._cam_target_pos = [0.25, 0.5, 0.5]
-        self.sim.resetDebugVisualizerCamera(cameraDistance=self._cam_dist, cameraYaw=self._cam_yaw, cameraPitch=self._cam_pitch, cameraTargetPosition=self._cam_target_pos)
-        self._cam_mat = self.sim.computeViewMatrixFromYawPitchRoll(
-            cameraTargetPosition=self._cam_target_pos, distance=self._cam_dist, yaw=self._cam_yaw, pitch=self._cam_pitch, roll=self._cam_roll, upAxisIndex=2
-        )
-        self._cam_proj_mat = [1.0, 0.0, 0.0, 0.0,
-                         0.0, 1.0, 0.0, 0.0,
-                         0.0, 0.0, -1.0000200271606445, -1.0,
-                         0.0, 0.0, -0.02000020071864128, 0.0]
-        
+        self.physicsClientId = -1
+        self.ownsPhysicsClient = 0
+
         #robot base pose
         self.posRight=np.array([0,0,0])
         self.posLeft=np.array([0,0.8,0])
@@ -104,6 +91,28 @@ class DualFrankaPandaBulletEnv(gym.Env):
         return joint_positions, joint_velocities, joint_torques
     
     def initialize_bullet(self):
+        if self.physicsClientId < 0:
+            self.ownsPhysicsClient = True
+            self.sim = bclient.BulletClient(connection_mode=p.GUI if self.isRendering else p.DIRECT)
+
+            self.physicsClientId = self.sim._client
+            self.sim.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
+        
+        #for the visualizer
+        self._cam_dist = 1
+        self._cam_yaw = 90
+        self._cam_pitch=-30
+        self._cam_roll=0
+        self._cam_target_pos = [0.25, 0.5, 0.5]
+        self.sim.resetDebugVisualizerCamera(cameraDistance=self._cam_dist, cameraYaw=self._cam_yaw, cameraPitch=self._cam_pitch, cameraTargetPosition=self._cam_target_pos)
+        self._cam_mat = self.sim.computeViewMatrixFromYawPitchRoll(
+            cameraTargetPosition=self._cam_target_pos, distance=self._cam_dist, yaw=self._cam_yaw, pitch=self._cam_pitch, roll=self._cam_roll, upAxisIndex=2
+        )
+        self._cam_proj_mat = [1.0, 0.0, 0.0, 0.0,
+                         0.0, 1.0, 0.0, 0.0,
+                         0.0, 0.0, -1.0000200271606445, -1.0,
+                         0.0, 0.0, -0.02000020071864128, 0.0]
+
         self.sim.resetSimulation(p.RESET_USE_DEFORMABLE_WORLD)  # FEM deform sim
         self.sim_gravity = -10.0
         self.sim.setGravity(0, 0, self.sim_gravity)
@@ -111,7 +120,7 @@ class DualFrankaPandaBulletEnv(gym.Env):
         self.sim.setAdditionalSearchPath(pd.getDataPath())
         self.floor_id = self.sim.loadURDF('plane.urdf')
         
-        if self.args.viz:  # no rendering during load
+        if self.isRendering:  # no rendering during load
             self.sim.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
             
         self.robots = self.load_robots()
@@ -159,6 +168,9 @@ class DualFrankaPandaBulletEnv(gym.Env):
         return
 
     def render(self, mode='rgb_array', width=256, height=256):
+        if mode=='human':
+            self.isRendering = True #turn on visualization for the next reset
+
         (_, _, px, _, _) = self.sim.getCameraImage(width=width,
                                               height=height,
                                               viewMatrix=self._cam_mat,
@@ -170,6 +182,12 @@ class DualFrankaPandaBulletEnv(gym.Env):
 
         rgb_array = rgb_array[:, :, :3]
         return rgb_array
+    
+    def _close(self):
+        if self.ownsPhysicsClient:
+            if self.physicsClientId >= 0:
+                self._p.disconnect()
+        self.physicsClientId = -1
 
 import pybullet_utils.transformations as trans
 

@@ -30,14 +30,19 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
     seed = config.seed
     policy_type = config.rl_policy
 
+    isRendering = True
+
     set_seed(seed)
     trainer = Trainer(snapshot_config=ctxt)
 
     env = normalize(BulletEnv('DualFrankaPandaObjectsBulletEnv-v0'))
+    print(env._env.isRendering)
+    env._env.isRendering = isRendering
 
     #need a separate seed for gym environment for full determinism
     env.seed(seed)
     env.action_space.seed(seed)
+
     #original hidden size 256
     hidden_size = 16
 
@@ -76,8 +81,12 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
             sampler=sampler,
             discount=0.99,
             gae_lambda=0.95,
-            lr_clip_range=0.2,
+            lr_clip_range=0.1,
             center_adv=False)
+
+    for g in algo._policy_optimizer._optimizer.param_groups:
+        g['lr'] = args.lr
+
 
     # if torch.cuda.is_available():
     #     set_gpu_mode(True)
@@ -85,7 +94,7 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
     #     set_gpu_mode(False)
     # algo.to()
     trainer.setup(algo, env)
-    trainer.train(n_epochs=100, batch_size=4000, plot=True)   
+    trainer.train(n_epochs=100, batch_size=4000, plot=isRendering)   
     return
 
 import os
