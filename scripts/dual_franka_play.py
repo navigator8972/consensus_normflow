@@ -13,7 +13,7 @@ from consensus_normflow.consensus_normflow.consensus_policy_sb3 import Consensus
 def main(args):
     # nfds = ConsensusNormalizingFlowDynamics(n_dim=3, n_agents=2, n_flows=1, K=4)
     nfds = ConsensusDuoNormalizingFlowDynamics(n_dim=3, n_flows=1, K=20, D=0.1)
-    
+
     env = DualFrankaPandaObjectsBulletEnv(args)
     env.reset()
 

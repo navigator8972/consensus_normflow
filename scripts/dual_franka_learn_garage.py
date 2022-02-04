@@ -36,8 +36,8 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
     trainer = Trainer(snapshot_config=ctxt)
 
     env = normalize(BulletEnv('DualFrankaPandaObjectsBulletEnv-v0'))
-    print(env._env.isRendering)
-    env._env.isRendering = isRendering
+    # print(env._env.isRendering)
+    # env._env.isRendering = isRendering
 
     #need a separate seed for gym environment for full determinism
     env.seed(seed)

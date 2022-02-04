@@ -23,6 +23,7 @@ class DualFrankaPandaBulletEnv(gym.Env):
 
         self.physicsClientId = -1
         self.ownsPhysicsClient = 0
+        self.sim = None
 
         #robot base pose
         self.posRight=np.array([0,0,0])
@@ -99,7 +100,7 @@ class DualFrankaPandaBulletEnv(gym.Env):
             self.sim.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
         
         #for the visualizer
-        self._cam_dist = 1
+        self._cam_dist = 0.5
         self._cam_yaw = 90
         self._cam_pitch=-30
         self._cam_roll=0
@@ -122,12 +123,12 @@ class DualFrankaPandaBulletEnv(gym.Env):
         
         if self.isRendering:  # no rendering during load
             self.sim.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
-            
-        self.robots = self.load_robots()
 
+        self.robots = self.load_robots()
+        
         self.initialize_robot_pose()
 
-        if self.args.viz:  # loading done, so enable debug rendering if needed
+        if self.isRendering:  # loading done, so enable debug rendering if needed
             #time.sleep(0.1)  # wait for debug visualizer to catch up
             self.sim.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
             self.sim.resetDebugVisualizerCamera(cameraDistance=self._cam_dist, cameraYaw=self._cam_yaw, cameraPitch=self._cam_pitch, cameraTargetPosition=self._cam_target_pos)
@@ -170,6 +171,9 @@ class DualFrankaPandaBulletEnv(gym.Env):
     def render(self, mode='rgb_array', width=256, height=256):
         if mode=='human':
             self.isRendering = True #turn on visualization for the next reset
+        
+        if self.sim is None:
+            return np.array([]) #return blank when sim is not initiaized yet
 
         (_, _, px, _, _) = self.sim.getCameraImage(width=width,
                                               height=height,
@@ -452,7 +456,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         left_pos = [0.25, 0.5, 0.4]
         right_pos = [0.25, 0.24, 0.8]
 
-        box_size = 0.0
+        box_size = 0.1
 
         left_pos = (np.array(left_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
         right_pos = (np.array(right_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
