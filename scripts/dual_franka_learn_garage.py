@@ -30,7 +30,7 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
     seed = config.seed
     policy_type = config.rl_policy
 
-    isRendering = True
+    isRendering = False
 
     set_seed(seed)
     trainer = Trainer(snapshot_config=ctxt)
@@ -51,12 +51,15 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
         policy = GaussianMLPPolicy(env.spec,
                                 hidden_sizes=[hidden_size, hidden_size],
                                 hidden_nonlinearity=torch.relu,
-                                output_nonlinearity=None)
+                                output_nonlinearity=None,
+                                init_std=2.0
+                                )
 
     else:
         print('Using Consensus NormalizingFlow Policy')
         policy = GaussianConsensusNormalizingFlowPolicy(env.spec,
-                                nfds=None)                  #use default nfds parameters, see the policy implementation  
+                                                        nfds=None,  #use default nfds parameters, see the policy implementation
+                                                        init_std=2.0)                    
 
 
     #shared settings
@@ -94,7 +97,7 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
     #     set_gpu_mode(False)
     # algo.to()
     trainer.setup(algo, env)
-    trainer.train(n_epochs=100, batch_size=4000, plot=isRendering)   
+    trainer.train(n_epochs=50, batch_size=4000, plot=isRendering)   
     return
 
 import os

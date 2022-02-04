@@ -17,7 +17,7 @@ def main(args):
     env = DualFrankaPandaObjectsBulletEnv(args)
     env.reset()
 
-    policy = ConsensusNormalizingflowACPolicy(observation_space=env.observation_space, action_space=env.action_space, log_std_init=1.)
+    policy = ConsensusNormalizingflowACPolicy(observation_space=env.observation_space, action_space=env.action_space, log_std_init=2.)
 
     r = 0
     while env.t < 400:

@@ -352,7 +352,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
 
         #override state and action space for a task representation with only translation component
         #obs: translational position, velocity, note the right basis is taken as the origin
-        ws_cubic = np.array([1.0, 1.0, 1.0])
+        ws_cubic = np.array([2.0, 2.0, 2.0])
         low_right = np.concatenate([self.posRight - ws_cubic*0.5, -0.2*np.ones(3)])
         low_left = np.concatenate([self.posLeft - ws_cubic*0.5, -0.2*np.ones(3)])
         high_right = np.concatenate([self.posRight + ws_cubic*0.5, 0.2*np.ones(3)])
@@ -449,14 +449,19 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         self.objects_mass[0] = 0.05   #from the URDF
 
         self.objects_debug_drawers[0] = BulletDebugFrameDrawer(self.sim)
+
+        # tuning the friction of objects
+        friction = 0.05
+        self.sim.changeDynamics(self.objects[0], -1, lateralFriction=friction, spinningFriction=friction, rollingFriction=friction)
+        self.sim.changeDynamics(self.objects[1], -1, lateralFriction=friction, spinningFriction=friction, rollingFriction=friction)
         return
     
     def initialize_task_poses(self):
         #reset initial task poses, can be randomized
         left_pos = [0.25, 0.5, 0.4]
-        right_pos = [0.25, 0.24, 0.8]
+        right_pos = [0.25, 0.25, 0.6]
 
-        box_size = 0.1
+        box_size = 0.05
 
         left_pos = (np.array(left_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
         right_pos = (np.array(right_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
@@ -582,8 +587,8 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
             trans_control_left = a[:3].dot(jac_t_lst[0])
             trans_control_right = a[3:].dot(jac_t_lst[1])
 
-            kr = 20   #solely stiffness leads to instability, may need some damping
-            kd = 1
+            kr = 30   #solely stiffness leads to instability, may need some damping
+            kd = 1.5
             #augment some joint damping for stablizing the system
             rot_control_left = kr*rot_control_left - kd*np.array(left_v)[:-2]
             rot_control_right = kr*rot_control_right - kd*np.array(right_v)[:-2]
@@ -627,8 +632,9 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         if self.t >= self.horizon:
             terminal_err = np.linalg.norm(obs[:3]-obs[6:9])*10                                                      #scale for the terminal part
             reward -= terminal_err
-            if terminal_err < 1e-3:
-                success = True
+            success = True if terminal_err < 5e-3 else False
+            done = success  #note this is only useful for garage because sb3 will terminate the episode 
+                
 
         return obs, reward, done, dict( reward_pos=-running_pos_err, 
                                         reward_vel=-running_vel_err, 
