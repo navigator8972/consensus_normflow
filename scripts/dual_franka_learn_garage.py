@@ -18,7 +18,7 @@ from gym.envs.registration import register
 
 from consensus_normflow.consensus_normflow.consensus_policy_garage import GaussianConsensusNormalizingFlowPolicy
 
-max_episode_steps = 400
+max_episode_steps = 250
 
 register(   id='DualFrankaPandaObjectsBulletEnv-v0', 
             entry_point='consensus_normflow.envs:DualFrankaPandaObjectsBulletEnv',
@@ -44,7 +44,7 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
     env.action_space.seed(seed)
 
     #original hidden size 256
-    hidden_size = 16
+    hidden_size = 32
 
     if policy_type == 'NN':
         print('Using Vanilla NN Policy')
@@ -52,14 +52,14 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
                                 hidden_sizes=[hidden_size, hidden_size],
                                 hidden_nonlinearity=torch.relu,
                                 output_nonlinearity=None,
-                                init_std=2.0
+                                init_std=1.0
                                 )
 
     else:
         print('Using Consensus NormalizingFlow Policy')
         policy = GaussianConsensusNormalizingFlowPolicy(env.spec,
                                                         nfds=None,  #use default nfds parameters, see the policy implementation
-                                                        init_std=2.0)                    
+                                                        init_std=1.0)                    
 
 
     #shared settings
@@ -97,7 +97,7 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
     #     set_gpu_mode(False)
     # algo.to()
     trainer.setup(algo, env)
-    trainer.train(n_epochs=50, batch_size=4000, plot=isRendering)   
+    trainer.train(n_epochs=200, batch_size=5000, plot=isRendering)   
     return
 
 import os

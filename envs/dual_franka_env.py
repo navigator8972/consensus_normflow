@@ -370,7 +370,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         self.restPositionsRight = [0.2584990522331347, -0.6474235673406391, 0.2818125550604209, -1.574409341395127, 0.20990817572737575, 0.9757974029681046, 1.3900018760902164, 0.0, 0.0]
 
         #time steps of an episode
-        self.horizon = 350
+        self.horizon = 250
         self.t = 0
 
     def load_objects(self):
@@ -459,9 +459,9 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
     def initialize_task_poses(self):
         #reset initial task poses, can be randomized
         left_pos = [0.25, 0.5, 0.4]
-        right_pos = [0.25, 0.25, 0.6]
+        right_pos = [0.25, 0.25, 0.7]
 
-        box_size = 0.05
+        box_size = np.array([0.05, 0.05, 0])
 
         left_pos = (np.array(left_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
         right_pos = (np.array(right_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
@@ -622,9 +622,9 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         done = False
 
         #calculate reward as the negative of difference
-        running_pos_err = np.linalg.norm(obs[:3]-obs[6:9]) * 0.1 
-        running_vel_err = (np.linalg.norm(obs[3:6])+np.linalg.norm(obs[9:]))*0.01    #scale for velocity component
-        running_ctrl_efforts = (np.linalg.norm(a[:3])+np.linalg.norm(a[3:]))*1e-4  #scale for control penalty
+        running_pos_err = np.linalg.norm(obs[:3]-obs[6:9])
+        running_vel_err = (np.linalg.norm(obs[3:6])+np.linalg.norm(obs[9:]))*0.1    #scale for velocity component
+        running_ctrl_efforts = (np.linalg.norm(a[:3])+np.linalg.norm(a[3:]))*1e-3   #scale for control penalty
         reward = -running_pos_err-running_vel_err-running_ctrl_efforts
 
         success = False
@@ -632,7 +632,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         if self.t >= self.horizon:
             terminal_err = np.linalg.norm(obs[:3]-obs[6:9])*10                                                      #scale for the terminal part
             reward -= terminal_err
-            success = True if terminal_err < 5e-3 else False
+            success = True if terminal_err < 1e-1 else False    #distance to goal smaller than 1cm
             done = success  #note this is only useful for garage because sb3 will terminate the episode 
                 
 
