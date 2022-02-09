@@ -461,6 +461,10 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         left_pos = [0.25, 0.5, 0.4]
         right_pos = [0.25, 0.25, 0.7]
 
+        # z_offset = -0.05
+        # left_pos[2]+=z_offset
+        # right_pos[2]+=z_offset
+
         box_size = np.array([0.05, 0.05, 0])
 
         left_pos = (np.array(left_pos) + (np.random.rand(3)*box_size*2-box_size)).tolist()
