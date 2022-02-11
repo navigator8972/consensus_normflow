@@ -55,11 +55,18 @@ def dualfranka_bullet_tests(ctxt=None, config=None):
                                 init_std=1.0
                                 )
 
-    else:
+    elif policy_type == 'CNF-N':
         print('Using Consensus NormalizingFlow Policy')
         policy = GaussianConsensusNormalizingFlowPolicy(env.spec,
                                                         nfds=None,  #use default nfds parameters, see the policy implementation
-                                                        init_std=1.0)                    
+                                                        use_ti=False,
+                                                        init_std=1.0)
+    else:
+        print('Using Translational Invariant Consensus NormalizingFlow Policy')
+        policy = GaussianConsensusNormalizingFlowPolicy(env.spec,
+                                                        nfds=None,  #use default nfds parameters, see the policy implementation
+                                                        init_std=1.0)
+
 
 
     #shared settings
@@ -130,10 +137,10 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='args', add_help=False)
     parser.add_argument('--rl_policy', type=str, default='NN',
-                        choices=['NN', 'CNF', 'CNF-TI'],
+                        choices=['NN', 'CNF-N', 'CNF-TI'],
                         help='Name of policy used to train')
     parser.add_argument('--rl_algo', type=str, default='PPO',
-                        choices=['PPO', 'ARS'],
+                        choices=['PPO'],
                         help='Name of RL algo from Stable Baselines to train')
     parser.add_argument('--lr', type=float, default=1e-4,
                         help='Learning rate for training')

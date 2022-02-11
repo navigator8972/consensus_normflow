@@ -105,7 +105,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='args', add_help=True)
     parser.add_argument('--rl_policy', type=str, default='NN',
-                        choices=['NN', 'CNF', 'CNF-TI'],
+                        choices=['NN', 'CNF-N', 'CNF-TI'],
                         help='Name of policy used to train')
     parser.add_argument('--rl_algo', type=str, default='PPO',
                         choices=['PPO', 'ARS'],
