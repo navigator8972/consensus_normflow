@@ -343,10 +343,11 @@ class ConsensusNormalizingFlowDynamics(nn.Module):
 
         damping_u = (damping @ (x_dot.view(*batch_dims, self.n_agents, self.n_dim).unsqueeze(-1))).squeeze(-1)
 
-        Lphi = self.laplacian @ phi_agent.view(*batch_dims, self.n_agents*self.n_dim).unsqueeze(-1)  #(batch_dims, n_agents*n_dim, 1)
-        JLphi_agent = (phi_jac_agent.transpose(-2, -1) @ Lphi.view(*batch_dims, self.n_agents, self.n_dim, 1)).squeeze(-1)    #(batch_dims, n_agents, n_dim)
+        #apply K to scale the transformation of phi
+        Lphi = self.laplacian @ (self.K@phi_agent.unsqueeze(-1)).view(*batch_dims, self.n_agents*self.n_dim, 1)  #(batch_dims, n_agents*n_dim, 1)
+        JLphi_agent = (phi_jac_agent.transpose(-2, -1) @ self.K @ Lphi.view(*batch_dims, self.n_agents, self.n_dim, 1)).squeeze(-1)    #(batch_dims, n_agents, n_dim)
 
-        u = -self.K_scalar*JLphi_agent - damping_u
+        u = -JLphi_agent - damping_u
 
         return u.view(*batch_dims, self.n_agents*self.n_dim)
 

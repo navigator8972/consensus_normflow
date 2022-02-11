@@ -18,6 +18,7 @@ class GaussianConsensusNormalizingFlowPolicy(StochasticPolicy):
     def __init__(self,
                 env_spec,
                 nfds=None,
+                use_ti=True,    #whether to use translational invariant form when using default nfds
                 normal_distribution_cls=Normal,
                 init_std=1.0,
                 name='GaussianConsensusNormalizingFlowPolicy'):
@@ -27,8 +28,11 @@ class GaussianConsensusNormalizingFlowPolicy(StochasticPolicy):
         self._action_dim = env_spec.action_space.flat_dim
 
         if nfds is None:
-            nfds = ConsensusDuoNormalizingFlowDynamics(n_dim=self._obs_dim//4, n_flows=2, hidden_dim=16, K=25, D=1)
-        
+            if use_ti:
+                nfds = ConsensusDuoNormalizingFlowDynamics(n_dim=self._obs_dim//4, n_flows=2, hidden_dim=16, K=25, D=1)
+            else:
+                nfds = ConsensusNormalizingFlowDynamics(n_dim=self._obs_dim//4, n_agents=2, n_flows=2, hidden_dim=16, K=5, D=1)
+
         self.normflow_ds = nfds
 
         self._normal_distribution_cls=normal_distribution_cls

@@ -34,7 +34,7 @@ def save_numpy_to_video_matplotlib(array, filename, interval=50):
 
     ani = animation.FuncAnimation(fig, img_show, len(array), interval=interval)
 
-    #ani.save('{}.gif'.format(filename), writer='imagemagick', fps=1000/interval)
+    # ani.save('{}.gif'.format(filename), writer='imagemagick', fps=1000/interval)
     ani.save('{}.mp4'.format(filename))
     return
 
@@ -159,7 +159,6 @@ def main():
 
     #replace this env with the made one so we can test untrained initial pose height
     # env = normalize(BulletEnv('DualFrankaPandaObjectsBulletEnv-v0'))
-
 
     # env.seed(50)
 
