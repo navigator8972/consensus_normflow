@@ -31,7 +31,7 @@ class GaussianConsensusNormalizingFlowPolicy(StochasticPolicy):
             if use_ti:
                 nfds = ConsensusDuoNormalizingFlowDynamics(n_dim=self._obs_dim//4, n_flows=2, hidden_dim=16, K=25, D=1)
             else:
-                nfds = ConsensusNormalizingFlowDynamics(n_dim=self._obs_dim//4, n_agents=2, n_flows=2, hidden_dim=16, K=5, D=1)
+                nfds = ConsensusNormalizingFlowDynamics(n_dim=self._obs_dim//4, n_agents=2, n_flows=1, hidden_dim=16, K=5, D=1)
 
         self.normflow_ds = nfds
 

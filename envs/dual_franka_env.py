@@ -461,7 +461,7 @@ class DualFrankaPandaObjectsBulletEnv(DualFrankaPandaBulletEnv):
         left_pos = [0.25, 0.5, 0.4]
         right_pos = [0.25, 0.25, 0.7]
 
-        # z_offset = -0.05
+        # z_offset = 0.25
         # left_pos[2]+=z_offset
         # right_pos[2]+=z_offset
 
