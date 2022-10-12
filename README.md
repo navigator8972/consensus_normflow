@@ -3,7 +3,7 @@ Code implementation of consensus-based normalizing-flow policy for learning mult
 
 *Yin, H., Verginis, C. K., and Kragic, D. Consensus-based Normalizing-Flow Control: A Case Study in Learning Dual-Arm Coordination. 2022 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS). Kyoto, Japan.*
 
-<img src="./images/dual_arm_mating.png" width="192" />    <img src="./images/CNFTI_seed1_offset20cm.gif" width="256" /><img src="./images/CNFTI_seed1_offsetn20cm.gif" width="256" />
+<img src="./images/dual_arm_mating.png" width="192" />    <img src="./images/offset20cm.gif" width="256" /><img src="./images/offsetn20cm.gif" width="256" />
 
 # Dependencies
 
