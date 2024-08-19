@@ -5,18 +5,18 @@ Code implementation of consensus-based normalizing-flow policy for learning mult
 
 <img src="./images/dual_arm_mating.png" width="192" />    <img src="./images/offset20cm.gif" width="256" /><img src="./images/offsetn20cm.gif" width="256" />
 
-# Dependencies
+# Dependencies (Tested on)
 
-pytorch
+pytorch==1.10.2
 
-numpy
+numpy==1.22.2
 
-matplotlib
+matplotlib==3.5.1
 
 **For policy learning and gym environments**
 
 [pybullet](https://github.com/bulletphysics/bullet3)
 
-[garage](https://github.com/rlworkgroup/garage)
+[garage](https://github.com/rlworkgroup/garage/tree/e395ba67ff00947b7fe2958481ce6e606d3e9d96)
 
 Weights & Biases
